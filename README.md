@@ -24,11 +24,7 @@ Proyek ini adalah API berbasis Node.js menggunakan `whatsapp-web.js` untuk mengo
    ```sh
    node index.js
    ```
-   atau jika ingin menggunakan `nodemon` agar otomatis restart saat ada perubahan:
-   ```sh
-   npm install -g nodemon
-   nodemon index.js
-   ```
+
 
 ## 🔥 API Endpoints
 
