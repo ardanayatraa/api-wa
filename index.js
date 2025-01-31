@@ -95,6 +95,11 @@ app.get('/api/qr/:sessionId', (req, res) => {
   });
 });
 
+app.get('/', (req, res) => {
+    res.send('Welcome to WhatsApp API!');
+  });
+  
+
 // Menjalankan server
 server.listen(port, () => {
   console.log(`Server is running on http://localhost:${port}`);
