@@ -1,0 +1,18 @@
+{
+  "name": "whatsapp-web-js-server",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "express": "^4.21.2",
+    "punycode": "^2.3.1",
+    "puppeteer": "^22.8.2",
+    "socket.io": "^4.8.1",
+    "whatsapp-web.js": "^1.26.0"
+  }
+}
