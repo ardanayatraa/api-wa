@@ -139,6 +139,7 @@ GET /api/qr/mySession123
 
 ## 🎯 Catatan
 - **Nomor WhatsApp harus dalam format internasional**, misalnya: `6281234567890` (bukan `081234567890`).
+- **Kode QR Akan Muncul di terminal dan semua respon akan muncul di terminal tempat menjalankan index.js**.
 - **Pastikan WhatsApp Web aktif** setelah scan QR Code agar sesi tetap berjalan.
 - **Gunakan server dengan database** jika ingin menyimpan sesi WhatsApp agar tidak perlu scan ulang setiap kali server restart.
 
