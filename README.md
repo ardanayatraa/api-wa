@@ -39,10 +39,10 @@ POST /api/create-session
   "sessionId": "mySession123"
 }
 ```
-**Response (QR Code Data):**
+**Response Pesan Sesi sedang di buat, cek terminal untuk scan barcode:**
 ```json
 {
-  "qr": "data:image/png;base64,..." 
+    "message": "Session 3333 sedang dibuat!"
 }
 ```
 
