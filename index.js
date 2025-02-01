@@ -1,106 +1,137 @@
+const axios = require('axios');
 const express = require('express');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const http = require('http');
 const cors = require('cors');
 const bodyParser = require('body-parser');
+const socketIo = require('socket.io');
+const qrcode = require('qrcode-terminal');
 
 const app = express();
 const port = 3000;
 const server = http.createServer(app);
+const io = socketIo(server);
 
-// Middleware
 app.use(cors());
 app.use(bodyParser.json());
 
-const clients = {}; // Menyimpan session WhatsApp
+const clients = {}; // Menyimpan sesi WhatsApp
+const BEARER_TOKEN = 'LKFWziEjcL97dmsy1ppec1CqmBmRC6cAH4ukxVG6'; // Token untuk Laravel
 
-// Format nomor agar sesuai dengan WhatsApp API
+// Format nomor WhatsApp agar valid
 function formatPhoneNumber(phone) {
-  let formattedPhone = phone.replace(/\D/g, ''); // Hapus semua karakter selain angka
-  if (formattedPhone.startsWith('0')) {
-    formattedPhone = '62' + formattedPhone.substring(1);
-  }
-  if (!formattedPhone.startsWith('62')) {
-    return null; // Invalid format
-  }
-  return `${formattedPhone}@c.us`; // Format WhatsApp
+    let formattedPhone = phone.replace(/\D/g, '');
+    if (formattedPhone.startsWith('0')) {
+        formattedPhone = '62' + formattedPhone.substring(1);
+    }
+    return formattedPhone.startsWith('62') ? `${formattedPhone}@c.us` : null;
 }
 
-// API untuk membuat session WhatsApp dan mendapatkan QR Code
+// Fungsi untuk membuat session WhatsApp
+function createWhatsAppSession(sessionId) {
+    if (clients[sessionId]) {
+        console.log(`⚠️ Session ${sessionId} sudah aktif!`);
+        return clients[sessionId];
+    }
+
+    console.log(`🚀 Membuat session baru: ${sessionId}`);
+
+    const client = new Client({
+        puppeteer: { headless: true },
+        authStrategy: new LocalAuth({ clientId: sessionId }),
+    });
+
+    clients[sessionId] = client;
+
+    client.on('qr', (qr) => {
+        console.log(`📌 QR Code untuk session ${sessionId}:`);
+        qrcode.generate(qr, { small: true });
+        io.emit('qr', { sessionId, qr }); 
+    });
+
+    client.on('ready', () => {
+        console.log(`✅ Session ${sessionId} siap digunakan!`);
+    });
+
+    client.on('message', async (msg) => {
+        console.log(`📩 Pesan baru dari ${msg.from}: ${msg.body}`);
+
+        try {
+            const response = await axios.post(
+                'http://127.0.0.1:8000/api/store-chat',
+                {
+                    sender: msg.from,
+                    message: msg.body,
+                    timestamp: msg.timestamp,
+                },
+                {
+                    headers: {
+                        'Authorization': `Bearer ${BEARER_TOKEN}`,
+                        'Content-Type': 'application/json',
+                    },
+                }
+            );
+
+            console.log('✅ Respons Laravel:', response.data);
+            io.emit('new-message', response.data); 
+        } catch (error) {
+            console.error('❌ Gagal mengirim ke Laravel:', error.response ? error.response.data : error.message);
+        }
+    });
+
+    client.initialize();
+    return client;
+}
+
+
 app.post('/api/create-session', (req, res) => {
-  const { sessionId } = req.body;
+    let { sessionId } = req.body;
+    sessionId = sessionId || '2222'; 
 
-  if (!sessionId) {
-    return res.status(400).json({ error: 'Session ID is required!' });
-  }
+    if (clients[sessionId]) {
+        return res.status(200).json({ message: `Session ${sessionId} sudah aktif!` });
+    }
 
-  if (clients[sessionId]) {
-    return res.status(400).json({ error: `Session ${sessionId} already exists!` });
-  }
-
-  const client = new Client({
-    puppeteer: { headless: true },
-    authStrategy: new LocalAuth({ clientId: sessionId }),
-  });
-
-  clients[sessionId] = client;
-
-  client.on('qr', (qr) => {
-    res.json({ qr });
-  });
-
-  client.on('ready', () => {
-    console.log(`Session ${sessionId} is ready!`);
-  });
-
-  client.initialize();
+    createWhatsAppSession(sessionId);
+    res.json({ message: `Session ${sessionId} sedang dibuat!` });
 });
 
-// API untuk mengirim pesan ke nomor WhatsApp tertentu
 app.post('/api/send-message', (req, res) => {
-  const { sessionId, phone, message } = req.body;
+    let { sessionId, phone, message } = req.body;
+    sessionId = sessionId || '2222'; 
 
-  if (!sessionId || !phone || !message) {
-    return res.status(400).json({ error: 'Session ID, phone number, and message are required!' });
-  }
+    if (!phone || !message) {
+        return res.status(400).json({ error: 'Phone number and message are required!' });
+    }
 
-  const client = clients[sessionId];
+    const client = clients[sessionId];
+    if (!client) {
+        return res.status(404).json({ error: `Session ${sessionId} tidak ditemukan!` });
+    }
 
-  if (!client) {
-    return res.status(400).json({ error: `Session ${sessionId} not found!` });
-  }
+    const formattedPhone = formatPhoneNumber(phone);
+    if (!formattedPhone) {
+        return res.status(400).json({ error: 'Nomor telepon tidak valid! Gunakan format 62XXXXXXXXXX' });
+    }
 
-  const formattedPhone = formatPhoneNumber(phone);
-  if (!formattedPhone) {
-    return res.status(400).json({ error: 'Invalid phone number format! Use 62XXXXXXXXXX' });
-  }
-
-  client.sendMessage(formattedPhone, message)
-    .then(() => res.json({ status: 'Message sent successfully!' }))
-    .catch((err) => res.status(500).json({ error: `Failed to send message: ${err.message}` }));
+    client.sendMessage(formattedPhone, message)
+        .then(() => res.json({ status: '✅ Pesan berhasil dikirim!' }))
+        .catch((err) => res.status(500).json({ error: `❌ Gagal mengirim pesan: ${err.message}` }));
 });
 
-// API untuk mendapatkan QR Code dari session yang sudah dibuat
 app.get('/api/qr/:sessionId', (req, res) => {
-  const { sessionId } = req.params;
-  
-  const client = clients[sessionId];
-  
-  if (!client) {
-    return res.status(404).json({ error: `Session ${sessionId} not found!` });
-  }
+    const { sessionId } = req.params;
+    const client = clients[sessionId];
 
-  client.on('qr', (qr) => {
-    res.json({ qr });
-  });
+    if (!client) {
+        return res.status(404).json({ error: `Session ${sessionId} tidak ditemukan!` });
+    }
+
+    client.on('qr', (qr) => {
+        res.json({ qr });
+    });
 });
 
-app.get('/', (req, res) => {
-    res.send('Welcome to WhatsApp API!');
-  });
-  
-
-// Menjalankan server
 server.listen(port, () => {
-  console.log(`Server is running on http://localhost:${port}`);
+    console.log(`🚀 Server berjalan di http://localhost:${port}`);
 });
