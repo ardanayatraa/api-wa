@@ -237,6 +237,49 @@ app.get('/', (req, res) => {
     });
 });
 
+// Rute untuk membuat session berdasarkan sessionId
+app.get('/api/create/:sessionId', async (req, res) => {
+    let { sessionId } = req.params;
+
+    // Cek jika session sudah ada
+    if (clients[sessionId]) {
+        const client = clients[sessionId];
+
+        // Cek jika session rusak
+        if (!client.pupPage || client.pupPage.isClosed()) {
+            console.log(`🚨 Session ${sessionId} rusak, logout dan buat sesi baru...`);
+            await client.destroy();
+            deleteSessionFile(sessionId); // Hapus file sesi yang rusak
+            delete clients[sessionId];
+            await createWhatsAppSession(sessionId); // Buat session baru
+            return res.json({ message: `Sesi ${sessionId} rusak, membuat sesi baru!` });
+        }
+
+        return res.status(200).json({ message: `Session ${sessionId} sudah aktif!` });
+    }
+
+    // Membuat session baru
+    const client = await createWhatsAppSession(sessionId);
+    
+    // Menangani event QR dan mengirimkan URL QR ke layar
+    client.on('qr', (qr) => {
+        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qr)}`;
+
+        res.send(`
+            <html>
+            <head>
+                <title>QR Code for ${sessionId}</title>
+            </head>
+            <body style="text-align: center;">
+                <h2>QR Code untuk Sesi ${sessionId}</h2>
+                <img src="${qrUrl}" alt="QR Code">
+            </body>
+            </html>
+        `);
+    });
+});
+
+
 server.listen(port, () => {
     console.log(`🚀 Server berjalan di http://localhost:${port}`);
 });
