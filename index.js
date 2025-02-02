@@ -6,6 +6,8 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const socketIo = require('socket.io');
 const qrcode = require('qrcode-terminal');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
 const port = 3000;
@@ -16,7 +18,7 @@ app.use(cors());
 app.use(bodyParser.json());
 
 const clients = {}; // Menyimpan sesi WhatsApp
-const BEARER_TOKEN = 'LKFWziEjcL97dmsy1ppec1CqmBmRC6cAH4ukxVG6'; // Token untuk Laravel
+const BEARER_TOKEN = 'SOI6imwEskLQqud3pLc0tp97uOGj2jFic5C4Afup59b5e1ea'; // Token untuk Laravel
 
 // Format nomor WhatsApp agar valid
 function formatPhoneNumber(phone) {
@@ -27,30 +29,80 @@ function formatPhoneNumber(phone) {
     return formattedPhone.startsWith('62') ? `${formattedPhone}@c.us` : null;
 }
 
+// Fungsi untuk menghapus file sesi yang terkunci
+function deleteSessionFile(sessionId) {
+    const sessionPath = path.join(__dirname, '.wwebjs_auth', 'session-h', sessionId);
+    try {
+        if (fs.existsSync(sessionPath)) {
+            fs.rmdirSync(sessionPath, { recursive: true });
+            console.log(`✅ File sesi ${sessionId} berhasil dihapus.`);
+        }
+    } catch (error) {
+        console.error(`❌ Gagal menghapus file sesi ${sessionId}:`, error.message);
+    }
+}
+
 // Fungsi untuk membuat session WhatsApp
-function createWhatsAppSession(sessionId) {
+async function createWhatsAppSession(sessionId) {
     if (clients[sessionId]) {
         console.log(`⚠️ Session ${sessionId} sudah aktif!`);
-        return clients[sessionId];
+        const client = clients[sessionId];
+        
+        // Cek status session, jika rusak logout dan buat session baru
+        if (!client.pupPage || client.pupPage.isClosed()) {
+            console.log(`🚨 Sesi ${sessionId} rusak, logout dan buat sesi baru...`);
+            await client.destroy();
+            deleteSessionFile(sessionId); // Hapus file sesi yang rusak
+            delete clients[sessionId];
+            createWhatsAppSession(sessionId); // Buat session baru
+            return;
+        }
+
+        console.log(`✅ Menggunakan session yang sudah ada: ${sessionId}`);
+        return client;
     }
 
     console.log(`🚀 Membuat session baru: ${sessionId}`);
 
     const client = new Client({
-        puppeteer: { headless: true },
+        puppeteer: {
+            args: ['--no-sandbox', '--disable-setuid-sandbox']
+        },
         authStrategy: new LocalAuth({ clientId: sessionId }),
     });
 
     clients[sessionId] = client;
 
-    client.on('qr', (qr) => {
-        console.log(`📌 QR Code untuk session ${sessionId}:`);
-        qrcode.generate(qr, { small: true });
-        io.emit('qr', { sessionId, qr }); 
-    });
-
+    client.on('qr', async (qr) => {
+      console.log(`📌 QR Code untuk session ${sessionId}:`);
+      qrcode.generate(qr, { small: true });
+      io.emit('qr', { sessionId, qr });
+  
+      try {
+          // Kirim QR code ke Laravel API
+          const response = await axios.post(
+              'http://127.0.0.1:8000/api/store-qr', // Ganti dengan endpoint Laravel Anda
+              {
+                  sessionId: sessionId,
+                  qr: qr,
+              },
+              {
+                  headers: {
+                      'Authorization': `Bearer ${BEARER_TOKEN}`,
+                      'Content-Type': 'application/json',
+                  },
+              }
+          );
+  
+          console.log('✅ QR code berhasil dikirim ke Laravel:', response.data);
+      } catch (error) {
+          console.error('❌ Gagal mengirim QR ke Laravel:', error.response ? error.response.data : error.message);
+      }
+  });
+  
     client.on('ready', () => {
         console.log(`✅ Session ${sessionId} siap digunakan!`);
+        io.emit('ready', { sessionId, status: 'ready', message: `Session ${sessionId} siap digunakan!` });
     });
 
     client.on('message', async (msg) => {
@@ -79,7 +131,16 @@ function createWhatsAppSession(sessionId) {
         }
     });
 
-    client.initialize();
+    client.initialize().catch((error) => {
+        if (error.message.includes('EBUSY')) {
+            console.log(`❌ Error EBUSY terjadi pada sesi ${sessionId}, mencoba menghapus file sesi...`);
+            deleteSessionFile(sessionId);
+            createWhatsAppSession(sessionId); // Coba buat session baru setelah menghapus file
+        } else {
+            console.error(`❌ Error saat menginisialisasi session ${sessionId}:`, error.message);
+        }
+    });
+
     return client;
 }
 
@@ -89,6 +150,20 @@ app.post('/api/create-session', (req, res) => {
     sessionId = sessionId || '2222'; 
 
     if (clients[sessionId]) {
+        const client = clients[sessionId];
+        
+        // Cek jika session rusak
+        if (!client.pupPage || client.pupPage.isClosed()) {
+            console.log(`🚨 Session ${sessionId} rusak, logout dan buat session baru...`);
+            client.destroy().then(() => {
+                deleteSessionFile(sessionId);
+                delete clients[sessionId];
+                createWhatsAppSession(sessionId);
+                res.json({ message: `Sesi ${sessionId} rusak, membuat sesi baru!` });
+            });
+            return;
+        }
+
         return res.status(200).json({ message: `Session ${sessionId} sudah aktif!` });
     }
 
