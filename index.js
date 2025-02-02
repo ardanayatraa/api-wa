@@ -13,12 +13,49 @@ const app = express();
 const port = 3000;
 const server = http.createServer(app);
 const io = socketIo(server);
+const sqlite3 = require('sqlite3').verbose();
+const db = new sqlite3.Database('./database.db');
 
 app.use(cors());
 app.use(bodyParser.json());
 
+db.serialize(() => {
+    db.run(`
+        CREATE TABLE IF NOT EXISTS session (
+            session_id TEXT PRIMARY KEY,
+            barrier_token TEXT,
+            user_id INTEGER,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    `, (err) => {
+        if (err) console.error('❌ Gagal membuat tabel:', err.message);
+        else console.log('✅ Tabel session berhasil dibuat.');
+    });
+});
+
+
 const clients = {}; // Menyimpan sesi WhatsApp
-const BEARER_TOKEN = 'SOI6imwEskLQqud3pLc0tp97uOGj2jFic5C4Afup59b5e1ea'; // Token untuk Laravel
+
+let BEARER_TOKEN = '';
+
+function getBearerToken(sessionId) {
+    return new Promise((resolve, reject) => {
+        const query = `SELECT barrier_token FROM session WHERE session_id = ? ORDER BY created_at DESC LIMIT 1`;
+        
+        db.get(query, [sessionId], (err, row) => {
+            if (err) {
+                reject(err);  // Menangani error query
+            } else if (!row) {
+                reject(new Error('Session not found'));  // Jika session tidak ditemukan
+            } else {
+                console.log('Token ditemukan:', row.barrier_token);  // Menampilkan hasil query di console
+                BEARER_TOKEN = row.barrier_token; // Simpan token secara global
+                resolve(BEARER_TOKEN);  // Mengembalikan token yang ditemukan
+            }
+        });
+    });
+}
+
 
 // Format nomor WhatsApp agar valid
 function formatPhoneNumber(phone) {
@@ -83,6 +120,53 @@ function deleteCacheFile(sessionId) {
     }
 }
 
+function saveSession(sessionId) {
+    const query = `INSERT INTO session (session_id) VALUES (?) 
+                   ON CONFLICT(session_id) DO NOTHING`;
+    
+    db.run(query, [sessionId], function (err) {
+        if (err) {
+            console.error('❌ Gagal menyimpan session:', err.message);
+        } else {
+            console.log(`✅ Session ${sessionId} berhasil disimpan.`);
+        }
+    });
+}
+
+app.put('/sessions/:id', (req, res) => {
+    const { id } = req.params;
+    const { barrier_token, user_id } = req.body;
+    
+    const query = `UPDATE session SET barrier_token = ?, user_id = ? WHERE session_id = ?`;
+    
+    db.run(query, [barrier_token, user_id, id], function (err) {
+        if (err) {
+            return res.status(500).json({ error: err.message });
+        }
+        if (this.changes === 0) {
+            return res.status(404).json({ message: 'Session not found' });
+        }
+        res.json({ message: 'Session updated successfully' });
+    });
+});
+
+app.get('/sessions/:id', (req, res) => {
+    const { id } = req.params;
+    
+    const query = `SELECT session_id, barrier_token, user_id FROM session WHERE session_id = ?`;
+    
+    db.get(query, [id], (err, row) => {
+        if (err) {
+            return res.status(500).json({ error: err.message });
+        }
+        if (!row) {
+            return res.status(404).json({ message: 'Session not found' });
+        }
+        res.json(row);
+    });
+});
+
+
 
 // Fungsi untuk membuat session WhatsApp
 async function createWhatsAppSession(sessionId) {
@@ -114,6 +198,7 @@ async function createWhatsAppSession(sessionId) {
     });
 
     clients[sessionId] = client;
+    saveSession(sessionId);
 
     client.on('qr', async (qr) => {
         console.log(`📌 QR Code untuk session ${sessionId}:`);
@@ -141,6 +226,16 @@ async function createWhatsAppSession(sessionId) {
             console.error('❌ Gagal mengirim QR ke Laravel:', error.response ? error.response.data : error.message);
         }
     });
+    
+    // Event ketika autentikasi berhasil
+    client.on('authenticated', () => {
+        console.log('✅ WhatsApp authenticated successfully!');
+    });
+
+    // Event ketika autentikasi gagal
+    client.on('auth_failure', (msg) => {
+        console.log('❌ Authentication failed:', msg);
+    });
 
     client.on('ready', () => {
         console.log(`✅ Session ${sessionId} siap digunakan!`);
@@ -149,9 +244,15 @@ async function createWhatsAppSession(sessionId) {
         io.emit('session-ready', { sessionId, status: 'ready' });
     });
 
+
     client.on('message', async (msg) => {
         console.log(`📩 Pesan baru dari ${msg.from}: ${msg.body}`);
-
+        getBearerToken(sessionId).then(() => {
+            console.log('✅ Bearer token:', BEARER_TOKEN);
+        }).catch((err) => {           
+            console.error('❌ Gagal mendapatkan bearer token:', err.message);
+        });
+    
         try {
             const response = await axios.post(
                 'http://127.0.0.1:8000/api/store-chat',
@@ -218,7 +319,7 @@ app.post('/api/create-session', (req, res) => {
 
 app.post('/api/send-message', (req, res) => {
     let { sessionId, phone, message } = req.body;
-    sessionId = sessionId || '2222'; 
+    sessionId = sessionId ; 
 
     if (!phone || !message) {
         return res.status(400).json({ error: 'Phone number and message are required!' });
