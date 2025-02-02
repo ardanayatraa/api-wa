@@ -1,147 +1,156 @@
-# WhatsApp API 
+# 🚀 Dokumentasi WhatsApp Web API
 
-Proyek ini adalah API berbasis Node.js menggunakan `whatsapp-web.js` untuk mengontrol WhatsApp Web secara otomatis. API ini memungkinkan Anda untuk membuat sesi WhatsApp, mendapatkan QR Code untuk login, serta mengirim pesan ke nomor tertentu.
+Selamat datang di **WhatsApp Web API** resmi! API ini memungkinkan Anda berinteraksi dengan **WhatsApp Web** menggunakan `whatsapp-web.js`, **Node.js**, dan **Express**. API ini menyediakan endpoint untuk membuat sesi WhatsApp, mengirim pesan, mengambil kode QR, dan mengelola sesi. Mulai dengan mengikuti panduan di bawah ini.
 
-## 📌 Fitur
-- **Membuat sesi WhatsApp** dan mendapatkan QR Code untuk login.
-- **Mengirim pesan WhatsApp** ke nomor tertentu.
-- **Mendapatkan QR Code sesi yang sedang berjalan**.
+## 📜 Persyaratan
 
-## 🛠 Instalasi
+- **Node.js** 👉 [Instal Node.js](https://nodejs.org/)
+- **NPM (Node Package Manager)** 👉 [Instal NPM](https://www.npmjs.com/)
+- **Laravel API** 👉 (Untuk menyimpan data obrolan - Opsional)
 
-1. **Clone repository ini** (jika menggunakan Git):
-   ```sh
-   git clone https://github.com/username/whatsapp-api.git
-   cd whatsapp-api
-   ```
+## 🔧 Instalasi
 
-2. **Install dependencies**:
-   ```sh
-   npm install
-   ```
+1. Klon repositori atau unduh file.
+2. Instal dependensi yang diperlukan:
 
-3. **Jalankan server**:
-   ```sh
-   node index.js
-   ```
-
-
-## 🔥 API Endpoints
-
-### 1️⃣ Membuat Sesi WhatsApp dan Mendapatkan QR Code
-**Endpoint:**  
+```bash
+npm install
 ```
-POST /api/create-session
+
+3. Jalankan server:
+
+```bash
+node server.js
 ```
-**Request Body (JSON):**
+
+Server Anda akan berjalan di `http://localhost:3000`.
+
+---
+
+## 📑 Endpoint API
+
+### 1. `/api/create-session` (POST)
+Membuat sesi baru atau memeriksa apakah sesi sudah aktif.
+
+#### Body Permintaan
+
 ```json
 {
-  "sessionId": "mySession123"
+  "sessionId": "id-sesi-unik"
 }
 ```
-**Response Pesan Sesi sedang di buat, cek terminal untuk scan barcode:**
+
+#### Respon
+
 ```json
 {
-    "message": "Session 3333 sedang dibuat!"
+  "message": "Sesi 1234 sedang dibuat!"
+}
+```
+
+### 2. `/api/send-message` (POST)
+Mengirim pesan WhatsApp dari sesi tertentu.
+
+#### Body Permintaan
+
+```json
+{
+  "sessionId": "id-sesi-unik",
+  "phone": "628123456789",
+  "message": "Halo, ini adalah pesan uji coba"
+}
+```
+
+#### Respon
+
+```json
+{
+  "status": "✅ Pesan berhasil dikirim!"
+}
+```
+
+### 3. `/api/qr/:sessionId` (GET)
+Mendapatkan kode QR untuk sesi tertentu.
+
+#### Respon
+
+```json
+{
+  "qr": "<QR_CODE_STRING>"
+}
+```
+
+### 4. `/api/create/:sessionId` (GET)
+Membuat sesi baru jika belum ada atau mengembalikan status sesi saat ini.
+
+#### Respon
+
+```json
+{
+  "message": "Sesi <sessionId> sudah aktif!"
+}
+```
+
+### 5. `/api/delete` (POST)
+Menghapus sesi berdasarkan ID sesi.
+
+#### Body Permintaan
+
+```json
+{
+  "sessionId": "id-sesi-unik"
+}
+```
+
+#### Respon
+
+```json
+{
+  "message": "Sesi <sessionId> berhasil dihapus!"
+}
+```
+
+### 6. `/api/delete/:sessionId` (GET)
+Menghapus sesi berdasarkan ID sesi.
+
+#### Respon
+
+```json
+{
+  "message": "Sesi <sessionId> berhasil dihapus!"
 }
 ```
 
 ---
 
-### 2️⃣ Mengirim Pesan WhatsApp
-**Endpoint:**  
-```
-POST /api/send-message
-```
-**Request Body (JSON):**
-```json
-{
-  "sessionId": "mySession123",
-  "phone": "6281234567890",
-  "message": "Halo, ini pesan dari API WhatsApp!"
-}
-```
-**Response (Berhasil dikirim):**
-```json
-{
-  "status": "Message sent successfully!"
-}
-```
-**Response (Gagal dikirim):**
-```json
-{
-  "error": "Failed to send message: [Error Message]"
-}
-```
+## ⚙️ Cara Kerja
+
+### Manajemen Sesi
+- **Membuat Sesi**: Sesi baru dibuat menggunakan `sessionId` unik. Jika sesi sudah ada, sistem akan memeriksa validitas dan statusnya.
+- **Mengirim Pesan**: Pesan dapat dikirim ke kontak WhatsApp menggunakan nomor telepon dalam format `62XXXXXXXXXX`.
+- **Kode QR**: Kode QR dibuat untuk sesi guna mengautentikasi klien WhatsApp Web.
+- **Menghapus Sesi**: Sesi dapat dihapus berdasarkan `sessionId`, atau semua sesi dapat dihapus sekaligus.
 
 ---
 
-### 3️⃣ Mendapatkan QR Code Sesi yang Sedang Berjalan
-**Endpoint:**  
-```
-GET /api/qr/:sessionId
-```
-**Contoh:**  
-```
-GET /api/qr/mySession123
-```
-**Response (QR Code Terbaru):**
-```json
-{
-  "qr": "data:image/png;base64,..." 
-}
-```
-**Response (Jika sesi tidak ditemukan):**
-```json
-{
-  "error": "Session mySession123 not found!"
-}
-```
+## ⚠️ Penanganan Kesalahan
+
+- Jika `sessionId` tidak valid atau sesi tidak ditemukan, akan dikembalikan **kesalahan 404**.
+- Jika sesi rusak atau korup, sesi akan dihapus dan dibuat ulang.
 
 ---
 
-## 📌 Cara Menggunakan di React.js
+## 📝 Lisensi
 
-1. **Install axios** untuk melakukan HTTP request:
-   ```sh
-   npm install axios
-   ```
+Proyek ini bersifat **open-source** dan tersedia di bawah [Lisensi MIT](https://opensource.org/licenses/MIT).
 
-2. **Buat fungsi untuk mendapatkan QR Code di React:**
-   ```js
-   import axios from 'axios';
+---
 
-   const getQRCode = async (sessionId) => {
-     try {
-       const response = await axios.get(`http://localhost:3000/api/qr/${sessionId}`);
-       console.log(response.data.qr);
-     } catch (error) {
-       console.error('Error fetching QR Code:', error.response?.data?.error || error.message);
-     }
-   };
-   ```
+## 🏅 Lencana
 
-3. **Buat fungsi untuk mengirim pesan:**
-   ```js
-   const sendMessage = async (sessionId, phone, message) => {
-     try {
-       const response = await axios.post('http://localhost:3000/api/send-message', {
-         sessionId,
-         phone,
-         message
-       });
-       console.log(response.data.status);
-     } catch (error) {
-       console.error('Error sending message:', error.response?.data?.error || error.message);
-     }
-   };
-   ```
+[![Node.js](https://img.shields.io/badge/Node.js-12.x-green)](https://nodejs.org/)
+[![MIT License](https://img.shields.io/badge/License-MIT-blue)](https://opensource.org/licenses/MIT)
 
-## 🎯 Catatan
-- **Nomor WhatsApp harus dalam format internasional**, misalnya: `6281234567890` (bukan `081234567890`).
-- **Kode QR Akan Muncul di terminal dan semua respon akan muncul di terminal tempat menjalankan index.js**.
-- **Pastikan WhatsApp Web aktif** setelah scan QR Code agar sesi tetap berjalan.
-- **Gunakan server dengan database** jika ingin menyimpan sesi WhatsApp agar tidak perlu scan ulang setiap kali server restart.
+---
 
-## 📌 Lisensi
-Proyek ini dibuat untuk keperluan edukasi dan pengembangan. Gunakan dengan bijak dan jangan gunakan untuk spam atau aktivitas ilegal. 🚀
+📌 *Dibuat oleh Ardana Yatra*

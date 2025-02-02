@@ -31,16 +31,58 @@ function formatPhoneNumber(phone) {
 
 // Fungsi untuk menghapus file sesi yang terkunci
 function deleteSessionFile(sessionId) {
-    const sessionPath = path.join(__dirname, '.wwebjs_auth', 'session-h', sessionId);
-    try {
-        if (fs.existsSync(sessionPath)) {
-            fs.rmdirSync(sessionPath, { recursive: true });
-            console.log(`✅ File sesi ${sessionId} berhasil dihapus.`);
+    const sessionsDir = path.join(__dirname, '.wwebjs_auth');
+    
+    // Jika sessionId adalah 'all', hapus semua sesi
+    if (sessionId === 'all') {
+        fs.readdirSync(sessionsDir).forEach((folder) => {
+            if (folder.startsWith('session-')) {
+                const folderPath = path.join(sessionsDir, folder);
+                try {
+                    fs.rmdirSync(folderPath, { recursive: true });
+                    console.log(`✅ Folder sesi ${folder} berhasil dihapus.`);
+                } catch (error) {
+                    console.error(`❌ Gagal menghapus folder sesi ${folder}:`, error.message);
+                }
+            }
+        });
+        return;
+    }
+
+    // Cek apakah folder dengan nama sessionId ada
+    const sessionPath = path.join(sessionsDir, `session-${sessionId}`);
+
+    // Cek apakah folder sesuai dengan sessionId ada di dalam directory
+    fs.readdirSync(sessionsDir).forEach((folder) => {
+        if (folder === `session-${sessionId}`) {
+            try {
+                const folderPath = path.join(sessionsDir, folder);
+                fs.rmdirSync(folderPath, { recursive: true });
+                console.log(`✅ Folder sesi ${folder} berhasil dihapus.`);
+            } catch (error) {
+                console.error(`❌ Gagal menghapus folder sesi ${folder}:`, error.message);
+            }
+        } else {
+            console.log(`❌ Folder sesi ${sessionId} tidak ditemukan.`);
         }
-    } catch (error) {
-        console.error(`❌ Gagal menghapus file sesi ${sessionId}:`, error.message);
+    });
+}
+
+function deleteCacheFile(sessionId) {
+    const cacheDir = path.join(__dirname, '.wwebjs_cache', `session-${sessionId}`);
+
+    if (fs.existsSync(cacheDir)) {
+        try {
+            fs.rmdirSync(cacheDir, { recursive: true });
+            console.log(`✅ Cache untuk sesi ${sessionId} berhasil dihapus.`);
+        } catch (error) {
+            console.error(`❌ Gagal menghapus cache sesi ${sessionId}:`, error.message);
+        }
+    } else {
+        console.log(`⚠️ Cache untuk sesi ${sessionId} tidak ditemukan.`);
     }
 }
+
 
 // Fungsi untuk membuat session WhatsApp
 async function createWhatsAppSession(sessionId) {
@@ -222,7 +264,7 @@ app.get('/', (req, res) => {
         res.send(`
             <html>
             <head>
-                <title>README.md</title>
+                <title>Api Documentation</title>
                 <style>
                     body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: auto; }
                     pre { background: #f4f4f4; padding: 10px; overflow: auto; }
@@ -279,6 +321,69 @@ app.get('/api/create/:sessionId', async (req, res) => {
     });
 });
 
+app.post('/api/delete', (req, res) => {
+    const { sessionId } = req.body;
+
+    if (!sessionId) {
+        return res.status(400).json({ error: 'SessionId tidak ditemukan!' });
+    }
+
+    if (sessionId === 'all') {
+        // Hapus semua sesi
+        deleteSessionFile('all');
+        res.json({ message: 'Semua sesi berhasil dihapus!' });
+        return;
+    }
+
+    // Cek jika sesi ada
+    if (!clients[sessionId]) {
+        return res.status(404).json({ error: `Session ${sessionId} tidak ditemukan!` });
+    }
+
+    // Menghentikan sesi dan menghapus file sesi
+    const client = clients[sessionId];
+
+    client.destroy().then(() => {
+        // Hapus sesi dari objek clients dan hapus file sesi
+        delete clients[sessionId];
+        deleteSessionFile(sessionId); // Hapus file sesi yang terkait
+        deleteCacheFile(sessionId);
+        res.json({ message: `Sesi ${sessionId} berhasil dihapus!` });
+    }).catch((err) => {
+        console.error('❌ Gagal menghapus session:', err.message);
+        res.status(500).json({ error: `❌ Gagal menghapus session ${sessionId}: ${err.message}` });
+    });
+});
+
+app.get('/api/delete/:sessionId', (req, res) => {
+    const { sessionId } = req.params;
+
+    if (sessionId === 'all') {
+        // Hapus semua sesi
+        deleteSessionFile('all');
+        res.json({ message: 'Semua sesi berhasil dihapus!' });
+        return;
+    }
+
+    // Cek jika sesi ada
+    if (!clients[sessionId]) {
+        return res.status(404).json({ error: `Session ${sessionId} tidak ditemukan!` });
+    }
+
+    // Menghentikan sesi dan menghapus file sesi
+    const client = clients[sessionId];
+
+    client.destroy().then(() => {
+        // Hapus sesi dari objek clients dan hapus file sesi
+        delete clients[sessionId];
+        deleteSessionFile(sessionId); // Hapus file sesi yang terkait
+        deleteCacheFile(sessionId);
+        res.json({ message: `Sesi ${sessionId} berhasil dihapus!` });
+    }).catch((err) => {
+        console.error('❌ Gagal menghapus session:', err.message);
+        res.status(500).json({ error: `❌ Gagal menghapus session ${sessionId}: ${err.message}` });
+    });
+});
 
 server.listen(port, () => {
     console.log(`🚀 Server berjalan di http://localhost:${port}`);
