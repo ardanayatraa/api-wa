@@ -8,7 +8,7 @@ const socketIo = require('socket.io');
 const qrcode = require('qrcode-terminal');
 const fs = require('fs');
 const path = require('path');
-
+const marked = require('marked');
 const app = express();
 const port = 3000;
 const server = http.createServer(app);
@@ -204,6 +204,33 @@ app.get('/api/qr/:sessionId', (req, res) => {
 
     client.on('qr', (qr) => {
         res.json({ qr });
+    });
+});
+
+app.get('/', (req, res) => {
+    const readmePath = path.join(__dirname, 'README.md');
+    
+    fs.readFile(readmePath, 'utf8', (err, data) => {
+        if (err) {
+            return res.status(500).send('❌ Gagal membaca README.md');
+        }
+
+        const htmlContent = marked.parse(data); // Konversi Markdown ke HTML
+        res.send(`
+            <html>
+            <head>
+                <title>README.md</title>
+                <style>
+                    body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: auto; }
+                    pre { background: #f4f4f4; padding: 10px; overflow: auto; }
+                    code { font-family: monospace; }
+                </style>
+            </head>
+            <body>
+                ${htmlContent}
+            </body>
+            </html>
+        `);
     });
 });
 
