@@ -74,36 +74,37 @@ async function createWhatsAppSession(sessionId) {
     clients[sessionId] = client;
 
     client.on('qr', async (qr) => {
-      console.log(`📌 QR Code untuk session ${sessionId}:`);
-      qrcode.generate(qr, { small: true });
-      socket.emit('qr', qr);
-      io.emit('qr', { sessionId, qr });
-  
-      try {
-          // Kirim QR code ke Laravel API
-          const response = await axios.post(
-              'http://127.0.0.1:8000/api/store-qr', // Ganti dengan endpoint Laravel Anda
-              {
-                  sessionId: sessionId,
-                  qr: qr,
-              },
-              {
-                  headers: {
-                      'Authorization': `Bearer ${BEARER_TOKEN}`,
-                      'Content-Type': 'application/json',
-                  },
-              }
-          );
-  
-          console.log('✅ QR code berhasil dikirim ke Laravel:', response.data);
-      } catch (error) {
-          console.error('❌ Gagal mengirim QR ke Laravel:', error.response ? error.response.data : error.message);
-      }
-  });
-  
+        console.log(`📌 QR Code untuk session ${sessionId}:`);
+        qrcode.generate(qr, { small: true });
+        io.emit('qr', { sessionId, qr });
+
+        try {
+            // Kirim QR code ke Laravel API
+            const response = await axios.post(
+                'http://127.0.0.1:8000/api/store-qr', // Ganti dengan endpoint Laravel Anda
+                {
+                    sessionId: sessionId,
+                    qr: qr,
+                },
+                {
+                    headers: {
+                        'Authorization': `Bearer ${BEARER_TOKEN}`,
+                        'Content-Type': 'application/json',
+                    },
+                }
+            );
+
+            console.log('✅ QR code berhasil dikirim ke Laravel:', response.data);
+        } catch (error) {
+            console.error('❌ Gagal mengirim QR ke Laravel:', error.response ? error.response.data : error.message);
+        }
+    });
+
     client.on('ready', () => {
         console.log(`✅ Session ${sessionId} siap digunakan!`);
         io.emit('ready', { sessionId, status: 'ready', message: `Session ${sessionId} siap digunakan!` });
+        // Notify React app that the session is ready
+        io.emit('session-ready', { sessionId, status: 'ready' });
     });
 
     client.on('message', async (msg) => {
@@ -168,8 +169,9 @@ app.post('/api/create-session', (req, res) => {
         return res.status(200).json({ message: `Session ${sessionId} sudah aktif!` });
     }
 
-    createWhatsAppSession(sessionId);
-    res.json({ message: `Session ${sessionId} sedang dibuat!` });
+    createWhatsAppSession(sessionId).then(() => {
+        res.json({ message: `Session ${sessionId} sedang dibuat!` });
+    });
 });
 
 app.post('/api/send-message', (req, res) => {
