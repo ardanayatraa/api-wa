@@ -12,11 +12,19 @@ const marked = require('marked');
 const app = express();
 const port = 3000;
 const server = http.createServer(app);
-const io = socketIo(server);
+// const io = socketIo(server);
+
+const io = socketIo(server, {
+    cors: {
+      origin: "*",  
+      methods: ["GET", "POST"]
+    }
+  });
 const sqlite3 = require('sqlite3').verbose();
 const db = new sqlite3.Database('./database.db');
 
 app.use(cors());
+
 app.use(bodyParser.json());
 
 db.serialize(() => {
@@ -105,6 +113,49 @@ function deleteSessionFile(sessionId) {
     });
 }
 
+app.post('/api/connect/reset', (req, res) => {
+    let { sessionId } = req.body;
+
+    if (!sessionId) {
+        return res.status(400).json({ message: 'Session ID is required' });
+    }
+
+    const client = clients[sessionId];
+    
+    if (client) {
+        // Jika sesi sudah ada, matikan sesi yang ada terlebih dahulu
+        client.destroy().then(() => {
+            // Hapus sesi dari objek clients
+            delete clients[sessionId];
+
+            // Hapus file sesi dan cache yang terkait
+            deleteSessionFile(sessionId);
+            deleteCacheFile(sessionId);
+
+            // Buat sesi baru dengan sessionId yang sama
+            createWhatsAppSession(sessionId).then(() => {
+                res.json({
+                    message: `Sesi ${sessionId} berhasil direset dan sesi baru telah dibuat!`
+                });
+            }).catch((error) => {
+                res.status(500).json({ message: `Gagal membuat sesi baru: ${error.message}` });
+            });
+        }).catch((err) => {
+            res.status(500).json({ message: `Gagal menghentikan sesi: ${err.message}` });
+        });
+    } else {
+        // Jika sesi tidak ditemukan, buat sesi baru
+        createWhatsAppSession(sessionId).then(() => {
+            res.json({
+                message: `Sesi ${sessionId} baru telah dibuat!`
+            });
+        }).catch((error) => {
+            res.status(500).json({ message: `Gagal membuat sesi baru: ${error.message}` });
+        });
+    }
+});
+
+
 function deleteCacheFile(sessionId) {
     const cacheDir = path.join(__dirname, '.wwebjs_cache', `session-${sessionId}`);
 
@@ -132,6 +183,9 @@ function saveSession(sessionId) {
         }
     });
 }
+
+
+
 
 app.put('/sessions/:id', (req, res) => {
     const { id } = req.params;
@@ -204,8 +258,10 @@ async function createWhatsAppSession(sessionId) {
         console.log(`📌 QR Code untuk session ${sessionId}:`);
         qrcode.generate(qr, { small: true });
         io.emit('qr', { sessionId, qr });
-
+   
         try {
+            const BEARER_TOKEN = await getBearerToken(sessionId);  // Tunggu hasil token
+   
             // Kirim QR code ke Laravel API
             const response = await axios.post(
                 'http://127.0.0.1:8000/api/store-qr', // Ganti dengan endpoint Laravel Anda
@@ -220,16 +276,18 @@ async function createWhatsAppSession(sessionId) {
                     },
                 }
             );
-
+   
             console.log('✅ QR code berhasil dikirim ke Laravel:', response.data);
         } catch (error) {
             console.error('❌ Gagal mengirim QR ke Laravel:', error.response ? error.response.data : error.message);
         }
     });
+   
     
     // Event ketika autentikasi berhasil
     client.on('authenticated', () => {
         console.log('✅ WhatsApp authenticated successfully!');
+        io.emit('authenticated', { message: `Session ${sessionId} authenticated successfully!` });
     });
 
     // Event ketika autentikasi gagal
@@ -240,8 +298,8 @@ async function createWhatsAppSession(sessionId) {
     client.on('ready', () => {
         console.log(`✅ Session ${sessionId} siap digunakan!`);
         io.emit('ready', { sessionId, status: 'ready', message: `Session ${sessionId} siap digunakan!` });
-        // Notify React app that the session is ready
-        io.emit('session-ready', { sessionId, status: 'ready' });
+
+         updateSessionStatus(sessionId); 
     });
 
 
@@ -280,7 +338,7 @@ async function createWhatsAppSession(sessionId) {
         if (error.message.includes('EBUSY')) {
             console.log(`❌ Error EBUSY terjadi pada sesi ${sessionId}, mencoba menghapus file sesi...`);
             deleteSessionFile(sessionId);
-            createWhatsAppSession(sessionId); // Coba buat session baru setelah menghapus file
+            createWhatsAppSession(sessionId); 
         } else {
             console.error(`❌ Error saat menginisialisasi session ${sessionId}:`, error.message);
         }
@@ -290,9 +348,102 @@ async function createWhatsAppSession(sessionId) {
 }
 
 
+async function updateSessionStatus(sessionId) {
+
+    const status = 'expired'; 
+    try {
+        const BEARER_TOKEN = await getBearerToken(sessionId); // Ambil token Bearer
+
+        // Kirim status sesi ke Laravel API
+        const response = await axios.post(
+            'http://127.0.0.1:8000/api/update-status', // Ganti dengan endpoint Laravel Anda
+            {
+                sessionId: sessionId,
+                status: 'expired',
+            },
+            {
+                headers: {
+                    'Authorization': `Bearer ${BEARER_TOKEN}`,
+                    'Content-Type': 'application/json',
+                },
+            }
+        );
+
+        console.log(`✅ Status "${status}" berhasil dikirim ke Laravel:`, response.data);
+    } catch (error) {
+        console.error(`❌ Gagal mengirim status "${status}" ke Laravel:`, error.response ? error.response.data : error.message);
+    }
+}
+
+
+
+app.post('/api/connect', (req, res) => { 
+    let { sessionId } = req.body;
+
+    if (!sessionId) {
+        return res.status(400).json({ message: 'Session ID is required' });  // Validasi jika sessionId tidak ada
+    }
+
+    // Cek jika client dengan sessionId sudah ada di dalam objek clients
+    if (clients[sessionId]) {
+        const client = clients[sessionId];
+        
+        // Jika client sudah ada, lakukan pengecekan atau tindakan lebih lanjut (misalnya koneksi sudah aktif)
+        return res.json({
+            message: 'Session is already connected',
+            sessionId: sessionId
+        });
+    }
+
+    // Jika client dengan sessionId belum ada
+    try {
+        // Lakukan inisialisasi atau autentikasi ulang menggunakan sessionId di sini
+        const newClient = new Client({
+            puppeteer: {
+                args: ['--no-sandbox', '--disable-setuid-sandbox']
+            },
+            authStrategy: new LocalAuth({ clientId: sessionId })  // Menggunakan sessionId untuk autentikasi
+        });
+
+        // Event ketika autentikasi berhasil
+        newClient.on('authenticated', () => {
+            console.log(`✅ WhatsApp authenticated successfully for sessionId: ${sessionId}`);
+            // Mengirim event ke frontend menggunakan Socket.IO
+            io.emit('authenticated', { message: `Session ${sessionId} authenticated successfully!` });
+        });
+        
+        // Event ketika autentikasi gagal
+        newClient.on('auth_failure', (msg) => {
+            console.log(`❌ Authentication failed for sessionId: ${sessionId}. Reason: ${msg}`);
+            io.emit('authenticated', { message: `Authentication failed for sessionId: ${sessionId}. Reason: ${msg}` });
+        });
+
+        newClient.on('ready', () => {
+            console.log(`✅ Session ${sessionId} siap digunakan!`);
+            io.emit('ready', { sessionId, status: 'ready', message: `Session ${sessionId} siap digunakan!` });
+        });
+
+        // Inisialisasi client dan menunggu autentikasi
+        newClient.initialize();
+
+        // Menyimpan client yang baru terhubung ke dalam objek clients
+        clients[sessionId] = newClient;
+
+        // Kembalikan respons bahwa session baru berhasil dibuat dan terhubung
+        res.json({
+            message: 'Session is valid and client authenticated',
+            sessionId: sessionId
+        });
+
+    } catch (err) {
+        // Jika terjadi error saat inisialisasi client
+        res.status(500).json({ message: 'Failed to initialize session', error: err.message });
+    }
+});
+
 app.post('/api/create-session', (req, res) => {
     let { sessionId } = req.body;
-    sessionId = sessionId || '2222'; 
+    sessionId = sessionId; 
 
     if (clients[sessionId]) {
         const client = clients[sessionId];
@@ -407,7 +558,7 @@ app.get('/api/create/:sessionId', async (req, res) => {
     // Menangani event QR dan mengirimkan URL QR ke layar
     client.on('qr', (qr) => {
         const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qr)}`;
-
+        io.emit('qr', qr);
         res.send(`
             <html>
             <head>
