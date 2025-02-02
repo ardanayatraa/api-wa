@@ -76,6 +76,7 @@ async function createWhatsAppSession(sessionId) {
     client.on('qr', async (qr) => {
       console.log(`📌 QR Code untuk session ${sessionId}:`);
       qrcode.generate(qr, { small: true });
+      socket.emit('qr', qr);
       io.emit('qr', { sessionId, qr });
   
       try {
