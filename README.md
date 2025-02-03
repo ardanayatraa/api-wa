@@ -1,156 +1,155 @@
-# 🚀 Dokumentasi WhatsApp Web API
+# 📱 Dokumentasi WhatsApp Bot
 
-Selamat datang di **WhatsApp Web API** resmi! API ini memungkinkan Anda berinteraksi dengan **WhatsApp Web** menggunakan `whatsapp-web.js`, **Node.js**, dan **Express**. API ini menyediakan endpoint untuk membuat sesi WhatsApp, mengirim pesan, mengambil kode QR, dan mengelola sesi. Mulai dengan mengikuti panduan di bawah ini.
+## 🚀 Pendahuluan
 
-## 📜 Persyaratan
+Dokumentasi ini menjelaskan cara kerja dan fitur-fitur utama dari WhatsApp Bot yang telah dikembangkan. Bot ini menggunakan library whatsapp-web.js dan beberapa teknologi pendukung lainnya.
 
-- **Node.js** 👉 [Instal Node.js](https://nodejs.org/)
-- **NPM (Node Package Manager)** 👉 [Instal NPM](https://www.npmjs.com/)
-- **Laravel API** 👉 (Untuk menyimpan data obrolan - Opsional)
+## 🛠️ Teknologi yang Digunakan
 
-## 🔧 Instalasi
+- Express.js: Framework web untuk Node.js
+- whatsapp-web.js: Library untuk berinteraksi dengan WhatsApp Web
+- Socket.IO: Untuk komunikasi real-time
+- SQLite: Database ringan untuk menyimpan sesi
+- Axios: Untuk melakukan HTTP requests
 
-1. Klon repositori atau unduh file.
-2. Instal dependensi yang diperlukan:
+## 🔑 Fitur Utama
 
-```bash
-npm install
-```
+### 1. 🔄 Manajemen Sesi
+### 2. 📨 Pengiriman Pesan
+### 3. 🖼️ Generasi QR Code
+### 4. 🔐 Autentikasi
 
-3. Jalankan server:
+## 📋 API Endpoints
 
-```bash
-node server.js
-```
+### 1. POST /api/create-session
 
-Server Anda akan berjalan di `http://localhost:3000`.
+Membuat sesi WhatsApp baru.
 
----
-
-## 📑 Endpoint API
-
-### 1. `/api/create-session` (POST)
-Membuat sesi baru atau memeriksa apakah sesi sudah aktif.
-
-#### Body Permintaan
-
+**Request:**
 ```json
 {
-  "sessionId": "id-sesi-unik"
+  "phone": "6281234567890"
 }
 ```
 
-#### Respon
-
+**Response:**
 ```json
 {
-  "message": "Sesi 1234 sedang dibuat!"
+  "message": "Client for 6281234567890 is being initialized..."
 }
 ```
 
-### 2. `/api/send-message` (POST)
-Mengirim pesan WhatsApp dari sesi tertentu.
+### 2. POST /api/delete
 
-#### Body Permintaan
+Menghapus sesi WhatsApp yang ada.
 
+**Request:**
 ```json
 {
-  "sessionId": "id-sesi-unik",
-  "phone": "628123456789",
-  "message": "Halo, ini adalah pesan uji coba"
+  "phone": "6281234567890"
 }
 ```
 
-#### Respon
-
+**Response:**
 ```json
 {
-  "status": "✅ Pesan berhasil dikirim!"
+  "message": "Session 6281234567890 deleted successfully."
 }
 ```
 
-### 3. `/api/qr/:sessionId` (GET)
-Mendapatkan kode QR untuk sesi tertentu.
+### 3. POST /api/reset
 
-#### Respon
+Mereset dan membuat ulang sesi WhatsApp.
 
+**Request:**
 ```json
 {
-  "qr": "<QR_CODE_STRING>"
+  "phone": "6281234567890"
 }
 ```
 
-### 4. `/api/create/:sessionId` (GET)
-Membuat sesi baru jika belum ada atau mengembalikan status sesi saat ini.
-
-#### Respon
-
+**Response:**
 ```json
 {
-  "message": "Sesi <sessionId> sudah aktif!"
+  "message": "Sesi 6281234567890 berhasil direset dan dibuat ulang!"
 }
 ```
 
-### 5. `/api/delete` (POST)
-Menghapus sesi berdasarkan ID sesi.
+### 4. POST /api/send-message
 
-#### Body Permintaan
+Mengirim pesan WhatsApp.
 
+**Request:**
 ```json
 {
-  "sessionId": "id-sesi-unik"
+  "sessionId": "6281234567890",
+  "number": "6289876543210",
+  "message": "Halo, ini pesan dari bot!"
 }
 ```
 
-#### Respon
-
+**Response:**
 ```json
 {
-  "message": "Sesi <sessionId> berhasil dihapus!"
+  "message": "Pesan berhasil dikirim!",
+  "sessionId": "6281234567890",
+  "number": "6289876543210"
 }
 ```
 
-### 6. `/api/delete/:sessionId` (GET)
-Menghapus sesi berdasarkan ID sesi.
+### 5. PUT /api/client/store
 
-#### Respon
+Menyimpan atau memperbarui informasi sesi.
 
+**Request:**
 ```json
 {
-  "message": "Sesi <sessionId> berhasil dihapus!"
+  "phone": "6281234567890",
+  "user_id": 123,
+  "api_token": "your_api_token_here"
 }
 ```
 
----
+**Response:**
+```json
+{
+  "message": "Session stored successfully"
+}
+```
 
-## ⚙️ Cara Kerja
+## 🔄 Alur Kerja
 
-### Manajemen Sesi
-- **Membuat Sesi**: Sesi baru dibuat menggunakan `sessionId` unik. Jika sesi sudah ada, sistem akan memeriksa validitas dan statusnya.
-- **Mengirim Pesan**: Pesan dapat dikirim ke kontak WhatsApp menggunakan nomor telepon dalam format `62XXXXXXXXXX`.
-- **Kode QR**: Kode QR dibuat untuk sesi guna mengautentikasi klien WhatsApp Web.
-- **Menghapus Sesi**: Sesi dapat dihapus berdasarkan `sessionId`, atau semua sesi dapat dihapus sekaligus.
+1. Saat server dimulai, semua sesi yang tersimpan akan diinisialisasi.
+2. Untuk setiap sesi, QR code akan di-generate dan dikirim ke server Laravel.
+3. Setelah scan QR code, bot siap menerima dan mengirim pesan.
+4. Pesan yang diterima akan diteruskan ke server Laravel.
+5. Server dapat mengirim pesan melalui bot menggunakan API yang disediakan.
 
----
+## ⚠️ Penanganan Error
 
-## ⚠️ Penanganan Kesalahan
+- Semua error akan di-log ke console
+- Respons error akan dikirim kembali ke client dengan kode status yang sesuai
 
-- Jika `sessionId` tidak valid atau sesi tidak ditemukan, akan dikembalikan **kesalahan 404**.
-- Jika sesi rusak atau korup, sesi akan dihapus dan dibuat ulang.
+Contoh respons error:
 
----
+```json
+{
+  "error": "Nomor HP diperlukan!"
+}
+```
 
-## 📝 Lisensi
+## 🔒 Keamanan
 
-Proyek ini bersifat **open-source** dan tersedia di bawah [Lisensi MIT](https://opensource.org/licenses/MIT).
+- Menggunakan token Bearer untuk autentikasi
+- Menyimpan sesi di database lokal
+- Menggunakan CORS untuk mengamankan akses API
 
----
 
-## 🏅 Lencana
 
-[![Node.js](https://img.shields.io/badge/Node.js-12.x-green)](https://nodejs.org/)
-[![MIT License](https://img.shields.io/badge/License-MIT-blue)](https://opensource.org/licenses/MIT)
+## 📚 Referensi
 
----
+- [Dokumentasi whatsapp-web.js](https://docs.wwebjs.dev/)
+- [Dokumentasi Express.js](https://expressjs.com/)
+- [Dokumentasi Socket.IO](https://socket.io/docs/)
 
-📌 *Dibuat oleh Ardana Yatra*
+
