@@ -91,7 +91,7 @@ const createClient = (phone) => {
     
             // Kirim QR code ke Laravel API
             const response = await axios.post(
-                'http://127.0.0.1:8000/api/store-qr', // Endpoint Laravel
+                'http://hireach.test/api/store-qr', // Endpoint Laravel
                 {
                     sessionId: formattedPhone,
                     qr: qr,
@@ -137,7 +137,7 @@ const createClient = (phone) => {
             }
     
             const response = await axios.post(
-                "http://127.0.0.1:8000/api/store-chat",
+                "http://hireach.test/api/store-chat",
                 {
                     sender: message.from,
                     message: message.body,
@@ -179,7 +179,7 @@ async function updateQrStatus(phone, status) {
 
         // Send QR status to Laravel API
         const response = await axios.post(
-            'http://127.0.0.1:8000/api/update-qr-status', // Laravel API endpoint
+            'http://hireach.test/api/update-qr-status', // Laravel API endpoint
             {
                 sessionId: phone,
                 qr_status: status,  // Send status as 'qr_status'
@@ -204,7 +204,7 @@ async function updateSessionStatus(phone, status) {
 
         // Send session status to Laravel API
         const response = await axios.post(
-            'http://127.0.0.1:8000/api/update-session-status', // Laravel API endpoint
+            'http://hireach.test/api/update-session-status', // Laravel API endpoint
             {
                 sessionId: phone,
                 session_status: status,  // Send status as 'session_status'
